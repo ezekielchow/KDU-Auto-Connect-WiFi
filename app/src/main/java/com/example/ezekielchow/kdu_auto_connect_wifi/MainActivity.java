@@ -6,6 +6,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiInfo;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -32,7 +36,9 @@ public class MainActivity extends Activity {
     private String KDUStudentSSID = "Kdu-Student";
     private WifiManager wifiManager;
     private WifiScanReceiver wifiScanReceiver;
-    private String testSSID = "optik";
+    private String testSSID = "Jack's WiFi";
+    private WifiConfiguration wifiConfiguration;
+    private WifiInfo wifiInfo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,14 +117,45 @@ public class MainActivity extends Activity {
             {
                 Toast.makeText(MainActivity.this, WifiStatus, Toast.LENGTH_SHORT).show();
 
-                //scan for available networks
+                //KDU wifi not found
                 if (!scanForKDUWifi())
                 {
                     Log.d(WifiLog, "Unable to Scan for wifi or KDU wifi doesnt exist");
+                    Toast.makeText(MainActivity.this, "KDU wifi not found", Toast.LENGTH_SHORT).show();
                 }
-                else
+                else //KDU wifi found
                 {
-                    Log.d(WifiLog, "Network FOund!, Next Step");
+                    ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+                    NetworkInfo theWifi = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+
+                    if (theWifi.isConnectedOrConnecting()) //if wifi already connected to kdu network
+                    {
+                        String extraInfo = theWifi.getExtraInfo();
+                        String ssidWithQuotes = "\"" + testSSID + "\"";
+
+                        if (!(extraInfo.equals(ssidWithQuotes))) //connected to wrong wifi
+                        {
+                            Toast.makeText(MainActivity.this, "Connected To Wrong Wifi", Toast.LENGTH_SHORT).show();
+                        }
+                        else //Connected to KDU already. Login into the page displayed
+                        {
+                            Toast.makeText(MainActivity.this, "Connected To KDU Wifi", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    else //connect to KDU Wifi
+                    {
+                        boolean connectionToKDUWIfi = connectToKDUWifi();
+
+                        if (connectionToKDUWIfi) //Connected to KDU. Login into page
+                        {
+
+                        }
+                        else
+                        {
+                            Toast.makeText(MainActivity.this, "Something Went Wrong. Please contact administrator", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+
                 }
             }
         }
@@ -189,6 +226,42 @@ public class MainActivity extends Activity {
         else
         {
             return false;
+        }
+    }
+
+    public boolean connectToKDUWifi()
+    {
+        Log.d(WifiLog, "Network FOund!, Next Step");
+        wifiConfiguration = new WifiConfiguration();
+        wifiConfiguration.SSID = "\"" + testSSID + "\"";
+        wifiConfiguration.preSharedKey = "\"" + "getyourassbackhome" + "\"";
+        wifiManager.addNetwork(wifiConfiguration);
+
+        List<WifiConfiguration> list = wifiManager.getConfiguredNetworks();
+        for( WifiConfiguration i : list ) {
+            if(i.SSID != null && i.SSID.equals("\"" + testSSID + "\"")) {
+                wifiManager.disconnect();
+                wifiManager.enableNetwork(i.networkId, true);
+                wifiManager.reconnect();
+
+                break;
+            }
+        }
+
+        wifiInfo = wifiManager.getConnectionInfo();
+        String ssidOfWifiConnected = wifiInfo.getSSID();
+        Log.d(WifiLog, "the connected wifi" + ssidOfWifiConnected);
+        String ssidWithQuotes = "\"" + testSSID + "\"";
+
+        if (!(ssidOfWifiConnected.equals(ssidWithQuotes)))
+        {
+            Log.d(WifiLog, "Failed to connect");
+            return false;
+        }
+        else
+        {
+            Log.d(WifiLog, "Succesfully connected");
+            return true;
         }
     }
 
