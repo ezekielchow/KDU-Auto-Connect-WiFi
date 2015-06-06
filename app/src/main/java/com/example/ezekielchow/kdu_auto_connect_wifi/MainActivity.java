@@ -1,6 +1,7 @@
 package com.example.ezekielchow.kdu_auto_connect_wifi;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,6 +11,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -19,7 +21,27 @@ import android.widget.EditText;
 import android.widget.Toast;
 import android.net.wifi.WifiManager;
 
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.Volley;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.protocol.HTTP;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,7 +58,7 @@ public class MainActivity extends Activity {
     private String KDUStudentSSID = "Kdu-Student";
     private WifiManager wifiManager;
     private WifiScanReceiver wifiScanReceiver;
-    private String testSSID = "Jack's WiFi";
+    private String testSSID = "WiFi@McD";
     private WifiConfiguration wifiConfiguration;
     private WifiInfo wifiInfo;
 
@@ -109,14 +131,19 @@ public class MainActivity extends Activity {
         }
         else
         {
+            SharedPreferences.Editor sharedPrefEditor = getSharedPreferences(MyPreferencesName, MODE_PRIVATE).edit();
+
+            sharedPrefEditor.putString(MyUsernameStored, usernameEditText.getText().toString());
+            sharedPrefEditor.putString(MyPasswordStored, passwordEditText.getText().toString());
+
+            sharedPrefEditor.commit();
+
             if (!checkWifiStatus()) //wifi is disabled
             {
                 Toast.makeText(MainActivity.this, WifiStatus, Toast.LENGTH_SHORT).show();
             }
             else //wifi is enabled
             {
-                Toast.makeText(MainActivity.this, WifiStatus, Toast.LENGTH_SHORT).show();
-
                 //KDU wifi not found
                 if (!scanForKDUWifi())
                 {
@@ -140,6 +167,11 @@ public class MainActivity extends Activity {
                         else //Connected to KDU already. Login into the page displayed
                         {
                             Toast.makeText(MainActivity.this, "Connected To KDU Wifi", Toast.LENGTH_SHORT).show();
+
+                            //get redirected url and login
+                            new getRedirectedURL().execute();
+                            Toast.makeText(MainActivity.this, "Success! You Are Logged In!", Toast.LENGTH_SHORT).show();
+
                         }
                     }
                     else //connect to KDU Wifi
@@ -148,7 +180,9 @@ public class MainActivity extends Activity {
 
                         if (connectionToKDUWIfi) //Connected to KDU. Login into page
                         {
-
+                            //get redirected url and login
+                            new getRedirectedURL().execute();
+                            Toast.makeText(MainActivity.this, "Success! You Are Logged In!", Toast.LENGTH_SHORT).show();
                         }
                         else
                         {
@@ -234,7 +268,8 @@ public class MainActivity extends Activity {
         Log.d(WifiLog, "Network FOund!, Next Step");
         wifiConfiguration = new WifiConfiguration();
         wifiConfiguration.SSID = "\"" + testSSID + "\"";
-        wifiConfiguration.preSharedKey = "\"" + "getyourassbackhome" + "\"";
+        //wifiConfiguration.preSharedKey = "\"" + "getyourassbackhome" + "\"";
+        wifiConfiguration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         wifiManager.addNetwork(wifiConfiguration);
 
         List<WifiConfiguration> list = wifiManager.getConfiguredNetworks();
@@ -262,6 +297,87 @@ public class MainActivity extends Activity {
         {
             Log.d(WifiLog, "Succesfully connected");
             return true;
+        }
+    }
+
+    class getRedirectedURL extends AsyncTask<Void, Void, Void>
+    {
+        @Override
+        protected void onPreExecute()
+        {
+            super.onPreExecute();
+        }
+
+        @Override
+        protected Void doInBackground(Void... params)
+        {
+            try{
+                //get redirected url
+                String myURL = "http://173.194.120.105/generate_204";
+                URL url = new URL("http://173.194.120.105/generate_204");
+                URLConnection con = url.openConnection();
+                System.out.println("orignal url: " + con.getURL());
+                con.connect();
+                System.out.println("connected url: " + con.getURL());
+                InputStream is = con.getInputStream();
+                Log.d(WifiLog, "redirected url: " + con.getURL());
+                String redirectedURL = con.getURL().toString();
+                is.close();
+
+                //make http request to login
+                HttpClient httpClient = new DefaultHttpClient();
+                HttpPost httpPost = new HttpPost(redirectedURL);
+
+                SharedPreferences sharedPreference = getSharedPreferences(MyPreferencesName, MODE_PRIVATE);
+
+                String username = "";
+                String password = "";
+                //username and password existed
+                if(sharedPreference.contains(MyUsernameStored) && sharedPreference.contains(MyPasswordStored))
+                {
+                    username = sharedPreference.getString(MyUsernameStored, null);
+                    password = sharedPreference.getString(MyPasswordStored, null);
+                }
+                else //Obvoiusly something went wronggg. BUGSSS
+                {
+                    Toast.makeText(MainActivity.this, "U&P not detected, please contact administrator", Toast.LENGTH_SHORT).show();
+                }
+                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>(2);
+                nameValuePairs.add(new BasicNameValuePair("user", username));
+                nameValuePairs.add(new BasicNameValuePair("password", password));
+
+                //Encoding POST data
+                try {
+                    httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
+                } catch (UnsupportedEncodingException e) {
+                    // log exception
+                    e.printStackTrace();
+                }
+
+                //making POST request
+                try {
+                    HttpResponse response = httpClient.execute(httpPost);
+                    // write response to log
+                    Log.d("Http Post Response:", response.toString());
+                } catch (ClientProtocolException e) {
+                    // Log exception
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    // Log exception
+                    e.printStackTrace();
+                }
+
+            } catch (Exception e) {
+                Log.d(WifiLog, "Error getting url: ", e);
+            }
+
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void result)
+        {
+            super.onPostExecute(result);
         }
     }
 
