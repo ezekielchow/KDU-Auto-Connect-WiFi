@@ -55,10 +55,10 @@ public class MainActivity extends Activity {
     private EditText passwordEditText;
     private String WifiLog = "";
     private String WifiStatus = "";
-    private String KDUStudentSSID = "Kdu-Student";
+    private String KDUStudentSSID = "KDU-Student";
     private WifiManager wifiManager;
     private WifiScanReceiver wifiScanReceiver;
-    private String testSSID = "WiFi@McD";
+    private String testSSID = "KDU-Student";
     private WifiConfiguration wifiConfiguration;
     private WifiInfo wifiInfo;
 
@@ -290,8 +290,8 @@ public class MainActivity extends Activity {
         {
             try{
                 //get redirected url
-                String myURL = "http://173.194.120.105/generate_204";
-                URL url = new URL("http://173.194.120.105/generate_204");
+                String myURL = "http://216.58.196.78/generate_204";
+                URL url = new URL("http://216.58.196.78/generate_204");
                 URLConnection con = url.openConnection();
                 System.out.println("orignal url: " + con.getURL());
                 con.connect();
