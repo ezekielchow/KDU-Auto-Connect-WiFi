@@ -21,8 +21,14 @@ import android.widget.EditText;
 import android.widget.Toast;
 import android.net.wifi.WifiManager;
 
+import com.android.volley.NetworkResponse;
+import com.android.volley.Request;
 import com.android.volley.RequestQueue;
+import com.android.volley.RequestTickle;
+import com.android.volley.Response;
+import com.android.volley.request.StringRequest;
 import com.android.volley.toolbox.Volley;
+import com.android.volley.toolbox.VolleyTickle;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
@@ -45,8 +51,11 @@ import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
+import fr.castorflex.android.circularprogressbar.CircularProgressBar;
+import fr.castorflex.android.circularprogressbar.CircularProgressDrawable;
 
-public class MainActivity extends Activity {
+
+public class MainActivity extends Activity implements Runnable{
 
     private String MyPreferencesName = "SavedUsernameID";
     private String MyUsernameStored = "usernameStored";
@@ -61,6 +70,9 @@ public class MainActivity extends Activity {
     private String testSSID = "KDU-Student";
     private WifiConfiguration wifiConfiguration;
     private WifiInfo wifiInfo;
+    private String theRedirectedURL = "";
+    private String KDUURLGenerator = "http://216.58.196.78/generate_204";
+    private CircularProgressBar mCircularProgressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +80,10 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         //initializing variables
+        mCircularProgressBar = (CircularProgressBar) findViewById(R.id.loadingBar);
+        ((CircularProgressDrawable)mCircularProgressBar.getIndeterminateDrawable()).start();
+        mCircularProgressBar.setVisibility(View.INVISIBLE);
+
         usernameEditText = (EditText)findViewById(R.id.usernameEditText);
         passwordEditText = (EditText)findViewById(R.id.passwordEditText);
         wifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
@@ -101,6 +117,8 @@ public class MainActivity extends Activity {
 
     public void loginBtnClicked(View view)
     {
+        mCircularProgressBar.setVisibility(View.VISIBLE);
+
         //if details are missing
         if(usernameEditText.length() == 0 || passwordEditText.length() == 0)
         {
@@ -143,11 +161,12 @@ public class MainActivity extends Activity {
                         }
                         else //Connected to KDU already. Login into the page displayed
                         {
+                            Log.d(WifiLog, "Connected to KDU");
                             Toast.makeText(MainActivity.this, "Connected To KDU Wifi", Toast.LENGTH_SHORT).show();
 
                             //get redirected url and login
-                            new getRedirectedURL().execute();
-                            Toast.makeText(MainActivity.this, "Success! You Are Logged In!", Toast.LENGTH_SHORT).show();
+                            String URLForRedirection = getRedirectedURL();
+                            Log.d(WifiLog, "Came back to if else: " + URLForRedirection);
 
                         }
                     }
@@ -158,8 +177,9 @@ public class MainActivity extends Activity {
                         if (connectionToKDUWIfi) //Connected to KDU. Login into page
                         {
                             //get redirected url and login
-                            new getRedirectedURL().execute();
-                            Toast.makeText(MainActivity.this, "Success! You Are Logged In!", Toast.LENGTH_SHORT).show();
+                            String URLForRedirection = getRedirectedURL();
+                            Log.d(WifiLog, "Came back to if else: " + URLForRedirection);
+
                         }
                         else
                         {
@@ -277,86 +297,105 @@ public class MainActivity extends Activity {
         }
     }
 
-    class getRedirectedURL extends AsyncTask<Void, Void, Void>
+    private String getRedirectedURL()
     {
-        @Override
-        protected void onPreExecute()
+        RequestTickle mRequestTickle = VolleyTickle.newRequestTickle(getApplicationContext());
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, KDUURLGenerator, null, null);
+        mRequestTickle.add(stringRequest);
+        NetworkResponse response = mRequestTickle.start();
+
+        if (response.statusCode == 200) {
+            theRedirectedURL = VolleyTickle.parseResponse(response);
+        }
+        else
         {
-            super.onPreExecute();
+            theRedirectedURL = "nodata";
         }
 
-        @Override
-        protected Void doInBackground(Void... params)
-        {
-            try{
-                //get redirected url
-                String myURL = "http://216.58.196.78/generate_204";
-                URL url = new URL("http://216.58.196.78/generate_204");
-                URLConnection con = url.openConnection();
-                System.out.println("orignal url: " + con.getURL());
-                con.connect();
-                System.out.println("connected url: " + con.getURL());
-                InputStream is = con.getInputStream();
-                Log.d(WifiLog, "redirected url: " + con.getURL());
-                String redirectedURL = con.getURL().toString();
-                is.close();
-
-                //make http request to login
-                HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost(redirectedURL);
-
-                SharedPreferences sharedPreference = getSharedPreferences(MyPreferencesName, MODE_PRIVATE);
-
-                String username = "";
-                String password = "";
-                //username and password existed
-                if(sharedPreference.contains(MyUsernameStored) && sharedPreference.contains(MyPasswordStored))
-                {
-                    username = sharedPreference.getString(MyUsernameStored, null);
-                    password = sharedPreference.getString(MyPasswordStored, null);
-                }
-                else //Obvoiusly something went wronggg. BUGSSS
-                {
-                    Toast.makeText(MainActivity.this, "U&P not detected, please contact administrator", Toast.LENGTH_SHORT).show();
-                }
-                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>(2);
-                nameValuePairs.add(new BasicNameValuePair("user", username));
-                nameValuePairs.add(new BasicNameValuePair("password", password));
-
-                //Encoding POST data
-                try {
-                    httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-                } catch (UnsupportedEncodingException e) {
-                    // log exception
-                    e.printStackTrace();
-                }
-
-                //making POST request
-                try {
-                    HttpResponse response = httpClient.execute(httpPost);
-                    // write response to log
-                    Log.d("Http Post Response:", response.toString());
-                } catch (ClientProtocolException e) {
-                    // Log exception
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    // Log exception
-                    e.printStackTrace();
-                }
-
-            } catch (Exception e) {
-                Log.d(WifiLog, "Error getting url: ", e);
-            }
-
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(Void result)
-        {
-            super.onPostExecute(result);
-        }
+        return  theRedirectedURL;
     }
+
+    @Override
+    public void run()
+    {
+        //argaergearg
+    }
+
+//    class getRedirectedURL extends AsyncTask<Void, Void, Void>
+//    {
+//        @Override
+//        protected void onPreExecute()
+//        {
+//            super.onPreExecute();
+//        }
+//
+//        @Override
+//        protected Void doInBackground(Void... params)
+//        {
+//            try{
+//                //get redirected url
+//                String myURL = "http://216.58.196.78/generate_204";
+//                URL url = new URL("http://216.58.196.78/generate_204");
+//                URLConnection con = url.openConnection();
+//                System.out.println("orignal url: " + con.getURL());
+//                con.connect();
+//                System.out.println("connected url: " + con.getURL());
+//                InputStream is = con.getInputStream();
+//                Log.d(WifiLog, "redirected url: " + con.getURL());
+//                String redirectedURL = con.getURL().toString();
+//                is.close();
+//
+//                //make http request to login
+//                HttpClient httpClient = new DefaultHttpClient();
+//                HttpPost httpPost = new HttpPost(redirectedURL);
+//
+//                usernameEditText = (EditText)findViewById(R.id.usernameEditText);
+//                passwordEditText = (EditText)findViewById(R.id.passwordEditText);
+//
+//                String toUseUsername = usernameEditText.getText().toString();
+//                String toUsePassword = passwordEditText.getText().toString();
+//
+//                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>(2);
+//                nameValuePairs.add(new BasicNameValuePair("user", toUseUsername));
+//                nameValuePairs.add(new BasicNameValuePair("password", toUsePassword));
+//
+//                //Encoding POST data
+//                try {
+//                    httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
+//                } catch (UnsupportedEncodingException e) {
+//                    // log exception
+//                    e.printStackTrace();
+//                }
+//
+//                //making POST request
+//                try {
+//                    HttpResponse response = httpClient.execute(httpPost);
+//                    // write response to log
+//                    Log.d("Http Post Response:", response.toString());
+//                } catch (ClientProtocolException e) {
+//                    // Log exception
+//                    e.printStackTrace();
+//                    Toast.makeText(MainActivity.this, "Please Try Again.", Toast.LENGTH_SHORT).show();
+//                } catch (IOException e) {
+//                    // Log exception
+//                    e.printStackTrace();
+//                    Toast.makeText(MainActivity.this, "Please Try Again.", Toast.LENGTH_SHORT).show();
+//                }
+//
+//            } catch (Exception e) {
+//                Log.d(WifiLog, "Error getting url: ", e);
+//            }
+//
+//            return null;
+//        }
+//
+//        @Override
+//        protected void onPostExecute(Void result)
+//        {
+//            super.onPostExecute(result);
+//        }
+//    }
 
     class WifiScanReceiver extends BroadcastReceiver
     {
